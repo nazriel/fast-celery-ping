@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -22,72 +23,137 @@ func NewHandler() *Handler {
 }
 
 // CreatePingMessage creates a properly formatted Celery ping message
-func (h *Handler) CreatePingMessage(replyTo string) ([]byte, error) {
+func (h *Handler) CreatePingMessage(replyTo string, destinations []string) ([]byte, error) {
 	ticket := uuid.New().String()
 
-	message := map[string]interface{}{
+	// Determine destination - nil for broadcast, or specific destinations
+	var destination interface{}
+	if len(destinations) > 0 {
+		destination = destinations
+	} else {
+		destination = nil
+	}
+
+	// Create the control message that Celery workers expect
+	// Use ordered map to ensure exact field order matches Python celery
+	controlMessage := map[string]interface{}{
 		"method":      "ping",
 		"arguments":   map[string]interface{}{},
-		"destination": nil,
-		"reply":       true,
+		"destination": destination,
+		"pattern":     nil,
+		"matcher":     nil,
 		"ticket":      ticket,
+		"reply_to": map[string]interface{}{
+			"exchange":    "reply.celery.pidbox",
+			"routing_key": replyTo, // replyTo is already just the UUID
+		},
 	}
 
-	// Wrap in broadcast format
-	broadcast := map[string]interface{}{
-		"data":      message,
-		"timestamp": float64(time.Now().Unix()),
+	// JSON encode the control message
+	bodyBytes, err := json.Marshal(controlMessage)
+	if err != nil {
+		return nil, err
 	}
 
-	return json.Marshal(broadcast)
+	// Base64 encode the body like Python Celery does
+	base64Body := base64.StdEncoding.EncodeToString(bodyBytes)
+
+	// Set expiry to 10 seconds to ensure workers have time to respond
+	now := time.Now()
+	expires := now.Add(10 * time.Second).Unix()
+
+	// Create the complete message envelope matching Python Celery exactly
+	envelope := map[string]interface{}{
+		"body":             base64Body,
+		"content-encoding": "utf-8",
+		"content-type":     "application/json",
+		"headers": map[string]interface{}{
+			"clock":   1,
+			"expires": expires,
+		},
+		"properties": map[string]interface{}{
+			"delivery_mode": 2,
+			"delivery_info": map[string]interface{}{
+				"exchange":    "celery.pidbox",
+				"routing_key": "",
+			},
+			"priority":      0,
+			"body_encoding": "base64",
+			"delivery_tag":  uuid.New().String(),
+		},
+	}
+
+	return json.Marshal(envelope)
 }
 
 // ParseWorkerResponse parses a worker response and extracts relevant information
 func (h *Handler) ParseWorkerResponse(data []byte) (map[string]interface{}, error) {
-	var response map[string]interface{}
+	var envelope map[string]interface{}
 
-	// Try parsing as direct JSON first
-	if err := json.Unmarshal(data, &response); err != nil {
-		// If that fails, try parsing as string
-		var strResponse string
-		if err := json.Unmarshal(data, &strResponse); err != nil {
-			return nil, fmt.Errorf("failed to parse response: %w", err)
-		}
+	// Parse the response envelope
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return nil, fmt.Errorf("failed to parse response envelope: %w", err)
+	}
 
-		// Try parsing the string content as JSON
-		if err := json.Unmarshal([]byte(strResponse), &response); err != nil {
-			// If all parsing fails, return the string as a simple response
-			return map[string]interface{}{
-				"raw": strResponse,
-			}, nil
+	// Check if there's a base64-encoded body
+	if bodyStr, exists := envelope["body"]; exists {
+		if bodyString, ok := bodyStr.(string); ok {
+			// Decode base64 body
+			bodyBytes, err := base64.StdEncoding.DecodeString(bodyString)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode base64 body: %w", err)
+			}
+
+			// Parse the decoded body as JSON
+			var decodedBody map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &decodedBody); err != nil {
+				return nil, fmt.Errorf("failed to parse decoded body: %w", err)
+			}
+
+			// Return the decoded body as the main response
+			return decodedBody, nil
 		}
 	}
 
-	return response, nil
+	// Fallback: return the envelope as-is
+	return envelope, nil
 }
 
 // ExtractWorkerName extracts worker name from various response formats
 func (h *Handler) ExtractWorkerName(response map[string]interface{}) string {
-	// Try different fields that might contain the worker name
-	fields := []string{"hostname", "worker", "nodename", "node", "name"}
-
-	for _, field := range fields {
-		if value, exists := response[field]; exists {
-			if strValue, ok := value.(string); ok && strValue != "" {
-				return strValue
+	// For worker responses, look for keys that contain @ (worker names)
+	for workerName, value := range response {
+		if strings.Contains(workerName, "@") {
+			// Verify this is a worker response by checking for "ok" field
+			if workerData, ok := value.(map[string]interface{}); ok {
+				if _, exists := workerData["ok"]; exists {
+					return workerName
+				}
 			}
 		}
 	}
 
-	// Check if there's a nested worker info
-	if worker, exists := response["worker"]; exists {
-		if workerMap, ok := worker.(map[string]interface{}); ok {
+	// Try different fields that might contain the worker name
+	fields := []string{"hostname", "worker", "nodename", "node", "name"}
+
+	// Check in the data field first
+	if data, exists := response["data"]; exists {
+		if dataMap, ok := data.(map[string]interface{}); ok {
 			for _, field := range fields {
-				if value, exists := workerMap[field]; exists {
+				if value, exists := dataMap[field]; exists {
 					if strValue, ok := value.(string); ok && strValue != "" {
 						return strValue
 					}
 				}
+			}
+		}
+	}
+
+	// Check at top level
+	for _, field := range fields {
+		if value, exists := response[field]; exists {
+			if strValue, ok := value.(string); ok && strValue != "" {
+				return strValue
 			}
 		}
 	}
@@ -106,24 +172,21 @@ func (h *Handler) ExtractWorkerName(response map[string]interface{}) string {
 
 // ValidateResponse checks if a response is a valid ping response
 func (h *Handler) ValidateResponse(response map[string]interface{}) bool {
-	// Check for basic response structure
-	if method, exists := response["method"]; exists {
-		if methodStr, ok := method.(string); ok && methodStr == "pong" {
-			return true
+	// For worker responses, check if any key contains an "ok" field with "pong"
+	for workerName, value := range response {
+		if strings.Contains(workerName, "@") { // worker names typically contain @
+			if workerData, ok := value.(map[string]interface{}); ok {
+				if status, exists := workerData["ok"]; exists {
+					if statusStr, ok := status.(string); ok && statusStr == "pong" {
+						return true
+					}
+				}
+			}
 		}
 	}
 
-	// Check for worker information
+	// Check for worker information in various locations
 	if hostname := h.ExtractWorkerName(response); hostname != "" {
-		return true
-	}
-
-	// Check for common Celery response patterns
-	if _, exists := response["hostname"]; exists {
-		return true
-	}
-
-	if _, exists := response["worker"]; exists {
 		return true
 	}
 
@@ -132,7 +195,8 @@ func (h *Handler) ValidateResponse(response map[string]interface{}) bool {
 
 // CreateReplyQueue generates a unique reply queue name
 func (h *Handler) CreateReplyQueue() string {
-	return fmt.Sprintf("_kombu.binding.reply.celery.pidbox.%s", uuid.New().String())
+	// Use simple UUID format like Python Celery does
+	return uuid.New().String()
 }
 
 // GetBroadcastQueue returns the broadcast queue name for ping messages

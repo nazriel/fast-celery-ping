@@ -66,60 +66,91 @@ func (r *RedisBroker) Health(ctx context.Context) error {
 }
 
 // Ping implements the Celery ping functionality for Redis
-func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration) (map[string]PingResponse, error) {
+func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration, destinations []string) (map[string]PingResponse, error) {
 	if r.client == nil {
 		return nil, fmt.Errorf("Redis client not initialized")
 	}
 
-	// Create reply queue
+	// Create reply queue with simple UUID format
 	replyTo := r.handler.CreateReplyQueue()
 
 	// Create ping message
-	pingData, err := r.handler.CreatePingMessage(replyTo)
+	pingData, err := r.handler.CreatePingMessage(replyTo, destinations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ping message: %w", err)
 	}
 
-	// Setup reply queue and send broadcast message
-	pipe := r.client.Pipeline()
-	pipe.Del(ctx, replyTo)
-	pipe.Expire(ctx, replyTo, timeout+time.Second)
-	pipe.LPush(ctx, r.handler.GetBroadcastQueue(), string(pingData))
+	// Use the correct reply queue format: UUID.reply.celery.pidbox
+	baseReplyQueue := replyTo + ".reply.celery.pidbox"
 
-	_, err = pipe.Exec(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send ping message: %w", err)
+	// Python celery listens on multiple queue variants with different priorities
+	replyQueues := []string{
+		baseReplyQueue,
+		baseReplyQueue + string([]byte{0x06, 0x16}) + "3", // priority 3
+		baseReplyQueue + string([]byte{0x06, 0x16}) + "6", // priority 6
+		baseReplyQueue + string([]byte{0x06, 0x16}) + "9", // priority 9
 	}
 
-	// Wait for responses
+	// Publish the message to the broadcast channel
+	err = r.client.Publish(ctx, "/0.celery.pidbox", string(pingData)).Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to publish ping message: %w", err)
+	}
+
+	// Register reply queue binding like Python celery does
+	bindingKey := replyTo + string([]byte{0x06, 0x16, 0x06, 0x16}) + baseReplyQueue
+	err = r.client.SAdd(ctx, "_kombu.binding.reply.celery.pidbox", bindingKey).Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to register reply queue binding: %w", err)
+	}
+
+	// Wait for responses using blocking pop with timeout
 	responses := make(map[string]PingResponse)
 	deadline := time.Now().Add(timeout)
 
+	// Give workers a moment to see the reply queue binding
+	time.Sleep(50 * time.Millisecond)
+
 	for time.Now().Before(deadline) {
-		// Check for responses in the reply queue
-		result, err := r.client.BRPop(ctx, time.Millisecond*100, replyTo).Result()
+		// Calculate remaining time
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+
+		// Use 1s BRPOP timeout (Redis minimum)
+		// Never use less than 1s to avoid Redis warnings
+		brpopTimeout := 1 * time.Second
+		if remaining < brpopTimeout {
+			// If less than 1s remaining, break out of loop
+			break
+		}
+
+		// BRPOP on all queue variants
+		result, err := r.client.BRPop(ctx, brpopTimeout, replyQueues...).Result()
 		if err != nil {
 			if err == redis.Nil {
-				// No response yet, continue waiting
+				// Timeout - continue checking
 				continue
 			}
-			return nil, fmt.Errorf("failed to receive response: %w", err)
+			// Other error - break
+			break
 		}
 
 		if len(result) < 2 {
 			continue
 		}
 
-		// Parse response using protocol handler
+		// Process the response
 		response, err := r.handler.ParseWorkerResponse([]byte(result[1]))
 		if err != nil {
-			continue // Skip malformed responses
+			continue
 		}
 
-		// Validate and extract worker information
 		if r.handler.ValidateResponse(response) {
 			workerName := r.handler.ExtractWorkerName(response)
 			if workerName != "" {
+				// Add response (map will naturally deduplicate)
 				responses[workerName] = PingResponse{
 					WorkerName: workerName,
 					Status:     "pong",
@@ -129,8 +160,9 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration) (map[stri
 		}
 	}
 
-	// Clean up reply queue
-	r.client.Del(ctx, replyTo)
+	// Clean up reply queue binding and queues
+	r.client.SRem(ctx, "_kombu.binding.reply.celery.pidbox", bindingKey)
+	r.client.Del(ctx, replyQueues...)
 
 	return responses, nil
 }

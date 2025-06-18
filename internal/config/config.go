@@ -20,6 +20,7 @@ type Config struct {
 	Timeout      time.Duration
 	OutputFormat string
 	Verbose      bool
+	Destination  []string
 
 	// Advanced options
 	MaxWorkers    int

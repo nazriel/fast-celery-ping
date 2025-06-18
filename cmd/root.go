@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"fast-celery-ping/internal/broker"
@@ -14,14 +15,15 @@ import (
 )
 
 var (
-	cfg       *config.Config
-	brokerURL string
-	timeout   time.Duration
-	format    string
-	verbose   bool
-	database  int
-	username  string
-	password  string
+	cfg         *config.Config
+	brokerURL   string
+	timeout     time.Duration
+	format      string
+	verbose     bool
+	database    int
+	username    string
+	password    string
+	destination string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -56,6 +58,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&database, "database", 0, "Redis database number")
 	rootCmd.PersistentFlags().StringVar(&username, "username", "", "Redis username")
 	rootCmd.PersistentFlags().StringVar(&password, "password", "", "Redis password")
+	rootCmd.PersistentFlags().StringVarP(&destination, "destination", "d", "", "Comma separated list of destination node names")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -89,6 +92,13 @@ func initConfig() {
 	}
 	if password != "" {
 		cfg.Password = password
+	}
+	if destination != "" {
+		cfg.Destination = strings.Split(destination, ",")
+		// Trim whitespace from each destination
+		for i, dest := range cfg.Destination {
+			cfg.Destination[i] = strings.TrimSpace(dest)
+		}
 	}
 
 	// Validate configuration
@@ -124,11 +134,15 @@ func runPing(cmd *cobra.Command, args []string) error {
 	defer redisBroker.Close()
 
 	if cfg.Verbose {
-		fmt.Fprintf(os.Stderr, "Sending ping to workers (timeout: %v)...\n", cfg.Timeout)
+		if len(cfg.Destination) > 0 {
+			fmt.Fprintf(os.Stderr, "Sending ping to specific workers: %v (timeout: %v)...\n", cfg.Destination, cfg.Timeout)
+		} else {
+			fmt.Fprintf(os.Stderr, "Sending ping to workers (timeout: %v)...\n", cfg.Timeout)
+		}
 	}
 
 	// Execute ping
-	responses, err := redisBroker.Ping(ctx, cfg.Timeout)
+	responses, err := redisBroker.Ping(ctx, cfg.Timeout, cfg.Destination)
 	if err != nil {
 		return fmt.Errorf("ping failed: %w", err)
 	}

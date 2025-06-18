@@ -15,8 +15,9 @@ type PingResponse struct {
 
 // Broker interface defines the contract for different message brokers
 type Broker interface {
-	// Ping sends a ping command to all workers and returns their responses
-	Ping(ctx context.Context, timeout time.Duration) (map[string]PingResponse, error)
+	// Ping sends a ping command to workers and returns their responses
+	// If destinations is empty, ping all workers. Otherwise, ping only specified workers.
+	Ping(ctx context.Context, timeout time.Duration, destinations []string) (map[string]PingResponse, error)
 
 	// Connect establishes connection to the broker
 	Connect(ctx context.Context) error
