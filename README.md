@@ -120,8 +120,8 @@ GOOS=windows GOARCH=amd64 go build -o fast-celery-ping-windows-amd64.exe
 
 ## License
 
-[Add your license here]
+This project is licensed under the MIT License. See the [LICENSE.md](LICENSE.md) file for details.
 
 ## Contributing
 
-[Add contribution guidelines here]
+Contributions are welcome! Please open issues or submit pull requests.
