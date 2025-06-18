@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         go-version: ["1.24"]
 
     steps:
@@ -23,17 +23,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.go-version }}-
-            ${{ runner.os }}-go-
+          cache: true
 
       - name: Download dependencies
         run: go mod download
@@ -80,29 +70,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-1.24-
-            ${{ runner.os }}-go-
+          cache: true
 
       - name: Build for Linux
         run: GOOS=linux GOARCH=amd64 go build -o fast-celery-ping-linux-amd64
-
-      - name: Build for Linux ARM64
-        run: GOOS=linux GOARCH=arm64 go build -o fast-celery-ping-linux-arm64
-
-      - name: Build for macOS
-        run: GOOS=darwin GOARCH=amd64 go build -o fast-celery-ping-darwin-amd64
-
-      - name: Build for macOS ARM64
-        run: GOOS=darwin GOARCH=arm64 go build -o fast-celery-ping-darwin-arm64
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -110,6 +81,3 @@ jobs:
           name: binaries
           path: |
             fast-celery-ping-linux-amd64
-            fast-celery-ping-linux-arm64
-            fast-celery-ping-darwin-amd64
-            fast-celery-ping-darwin-arm64
