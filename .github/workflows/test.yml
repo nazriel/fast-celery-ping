@@ -1,0 +1,115 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go-version: ["1.23", "1.24"]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ matrix.go-version }}-
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run go fmt check
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "The following files are not formatted:"
+            gofmt -s -l .
+            exit 1
+          fi
+
+      - name: Run tests
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Run tests with verbose output (on failure)
+        if: failure()
+        run: go test -v -race ./...
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.24"
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-1.24-
+            ${{ runner.os }}-go-
+
+      - name: Build for Linux
+        run: GOOS=linux GOARCH=amd64 go build -o fast-celery-ping-linux-amd64
+
+      - name: Build for Linux ARM64
+        run: GOOS=linux GOARCH=arm64 go build -o fast-celery-ping-linux-arm64
+
+      - name: Build for macOS
+        run: GOOS=darwin GOARCH=amd64 go build -o fast-celery-ping-darwin-amd64
+
+      - name: Build for macOS ARM64
+        run: GOOS=darwin GOARCH=arm64 go build -o fast-celery-ping-darwin-arm64
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: |
+            fast-celery-ping-linux-amd64
+            fast-celery-ping-linux-arm64
+            fast-celery-ping-darwin-amd64
+            fast-celery-ping-darwin-arm64
