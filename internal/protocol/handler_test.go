@@ -48,24 +48,46 @@ func TestHandler_CreatePingMessage(t *testing.T) {
 	handler := NewHandler()
 	replyTo := "reply-queue-test"
 
-	messageData, err := handler.CreatePingMessage(replyTo)
-	if err != nil {
-		t.Fatalf("Failed to create ping message: %v", err)
+	tests := []struct {
+		name         string
+		destinations []string
+	}{
+		{
+			name:         "broadcast message",
+			destinations: nil,
+		},
+		{
+			name:         "targeted message",
+			destinations: []string{"worker1@host", "worker2@host"},
+		},
 	}
 
-	var message map[string]interface{}
-	err = json.Unmarshal(messageData, &message)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal ping message: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			messageData, err := handler.CreatePingMessage(replyTo, tt.destinations)
+			if err != nil {
+				t.Fatalf("Failed to create ping message: %v", err)
+			}
 
-	// Check that the message has the expected structure
-	if _, exists := message["data"]; !exists {
-		t.Error("Expected 'data' field in ping message")
-	}
+			var envelope map[string]interface{}
+			err = json.Unmarshal(messageData, &envelope)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal ping message: %v", err)
+			}
 
-	if _, exists := message["timestamp"]; !exists {
-		t.Error("Expected 'timestamp' field in ping message")
+			// Check that the envelope has the expected structure
+			if _, exists := envelope["body"]; !exists {
+				t.Error("Expected 'body' field in ping message envelope")
+			}
+
+			if _, exists := envelope["properties"]; !exists {
+				t.Error("Expected 'properties' field in ping message envelope")
+			}
+
+			if _, exists := envelope["headers"]; !exists {
+				t.Error("Expected 'headers' field in ping message envelope")
+			}
+		})
 	}
 }
 
@@ -78,27 +100,27 @@ func TestHandler_ExtractWorkerName(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "hostname field",
+			name: "celery worker response format",
+			response: map[string]interface{}{
+				"celery@nero": map[string]interface{}{
+					"ok": "pong",
+				},
+			},
+			expected: "celery@nero",
+		},
+		{
+			name: "hostname field fallback",
 			response: map[string]interface{}{
 				"hostname": "worker1@host",
 			},
 			expected: "worker1@host",
 		},
 		{
-			name: "worker field",
+			name: "worker field fallback",
 			response: map[string]interface{}{
 				"worker": "worker2@host",
 			},
 			expected: "worker2@host",
-		},
-		{
-			name: "nested worker info",
-			response: map[string]interface{}{
-				"worker": map[string]interface{}{
-					"hostname": "worker3@host",
-				},
-			},
-			expected: "worker3@host",
 		},
 		{
 			name: "no worker name",
@@ -128,21 +150,23 @@ func TestHandler_ValidateResponse(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "valid pong response",
+			name: "valid celery pong response",
 			response: map[string]interface{}{
-				"method": "pong",
+				"celery@nero": map[string]interface{}{
+					"ok": "pong",
+				},
 			},
 			expected: true,
 		},
 		{
-			name: "response with hostname",
+			name: "response with hostname fallback",
 			response: map[string]interface{}{
 				"hostname": "worker@host",
 			},
 			expected: true,
 		},
 		{
-			name: "response with worker",
+			name: "response with worker fallback",
 			response: map[string]interface{}{
 				"worker": "worker@host",
 			},
