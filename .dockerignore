@@ -48,6 +48,7 @@ test/
 # Development tools
 .air.toml
 Makefile
+Justfile
 docker-compose*.yml
 .local/
 local.config
@@ -70,3 +71,10 @@ vendor/
 
 # Claude development files
 CLAUDE.md
+
+# CI/CD
+.github/
+
+# Profiling and trace files
+*.trace/
+Launch_*/
