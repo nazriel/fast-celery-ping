@@ -17,13 +17,13 @@ type PingResponse struct {
 type Broker interface {
 	// Ping sends a ping command to all workers and returns their responses
 	Ping(ctx context.Context, timeout time.Duration) (map[string]PingResponse, error)
-	
+
 	// Connect establishes connection to the broker
 	Connect(ctx context.Context) error
-	
+
 	// Close closes the connection to the broker
 	Close() error
-	
+
 	// Health checks if the broker is reachable
 	Health(ctx context.Context) error
 }
@@ -44,18 +44,18 @@ func (c *Config) Validate() error {
 	if c.URL == "" {
 		return fmt.Errorf("broker URL is required")
 	}
-	
+
 	if c.Timeout <= 0 {
 		return fmt.Errorf("timeout must be positive")
 	}
-	
+
 	if c.OutputFormat != "json" && c.OutputFormat != "text" {
 		return fmt.Errorf("output format must be 'json' or 'text'")
 	}
-	
+
 	if c.MaxWorkers <= 0 {
 		return fmt.Errorf("max workers must be positive")
 	}
-	
+
 	return nil
 }

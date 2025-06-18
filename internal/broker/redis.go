@@ -43,7 +43,7 @@ func (r *RedisBroker) Connect(ctx context.Context) error {
 	}
 
 	r.client = redis.NewClient(opts)
-	
+
 	// Test connection
 	return r.Health(ctx)
 }
@@ -61,7 +61,7 @@ func (r *RedisBroker) Health(ctx context.Context) error {
 	if r.client == nil {
 		return fmt.Errorf("Redis client not initialized")
 	}
-	
+
 	return r.client.Ping(ctx).Err()
 }
 
@@ -73,7 +73,7 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration) (map[stri
 
 	// Create reply queue
 	replyTo := r.handler.CreateReplyQueue()
-	
+
 	// Create ping message
 	pingData, err := r.handler.CreatePingMessage(replyTo)
 	if err != nil {
@@ -85,7 +85,7 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration) (map[stri
 	pipe.Del(ctx, replyTo)
 	pipe.Expire(ctx, replyTo, timeout+time.Second)
 	pipe.LPush(ctx, r.handler.GetBroadcastQueue(), string(pingData))
-	
+
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send ping message: %w", err)
@@ -94,7 +94,7 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration) (map[stri
 	// Wait for responses
 	responses := make(map[string]PingResponse)
 	deadline := time.Now().Add(timeout)
-	
+
 	for time.Now().Before(deadline) {
 		// Check for responses in the reply queue
 		result, err := r.client.BRPop(ctx, time.Millisecond*100, replyTo).Result()
@@ -105,17 +105,17 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration) (map[stri
 			}
 			return nil, fmt.Errorf("failed to receive response: %w", err)
 		}
-		
+
 		if len(result) < 2 {
 			continue
 		}
-		
+
 		// Parse response using protocol handler
 		response, err := r.handler.ParseWorkerResponse([]byte(result[1]))
 		if err != nil {
 			continue // Skip malformed responses
 		}
-		
+
 		// Validate and extract worker information
 		if r.handler.ValidateResponse(response) {
 			workerName := r.handler.ExtractWorkerName(response)
@@ -131,7 +131,6 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration) (map[stri
 
 	// Clean up reply queue
 	r.client.Del(ctx, replyTo)
-	
+
 	return responses, nil
 }
-

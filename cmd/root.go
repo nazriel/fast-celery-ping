@@ -14,14 +14,14 @@ import (
 )
 
 var (
-	cfg        *config.Config
-	brokerURL  string
-	timeout    time.Duration
-	format     string
-	verbose    bool
-	database   int
-	username   string
-	password   string
+	cfg       *config.Config
+	brokerURL string
+	timeout   time.Duration
+	format    string
+	verbose   bool
+	database  int
+	username  string
+	password  string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -61,13 +61,13 @@ func init() {
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
 	cfg = config.DefaultConfig()
-	
+
 	// Load from environment
 	if err := cfg.LoadFromEnv(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config from environment: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// Override with command line flags
 	if brokerURL != "" {
 		cfg.BrokerURL = brokerURL
@@ -90,7 +90,7 @@ func initConfig() {
 	if password != "" {
 		cfg.Password = password
 	}
-	
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
@@ -102,11 +102,11 @@ func initConfig() {
 func runPing(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout+time.Second)
 	defer cancel()
-	
+
 	if cfg.Verbose {
 		fmt.Fprintf(os.Stderr, "Connecting to broker: %s\n", cfg.BrokerURL)
 	}
-	
+
 	// Create broker
 	brokerConfig := broker.Config{
 		URL:      cfg.BrokerURL,
@@ -114,25 +114,25 @@ func runPing(cmd *cobra.Command, args []string) error {
 		Username: cfg.Username,
 		Password: cfg.Password,
 	}
-	
+
 	redisBroker := broker.NewRedisBroker(brokerConfig)
-	
+
 	// Connect to broker
 	if err := redisBroker.Connect(ctx); err != nil {
 		return fmt.Errorf("failed to connect to broker: %w", err)
 	}
 	defer redisBroker.Close()
-	
+
 	if cfg.Verbose {
 		fmt.Fprintf(os.Stderr, "Sending ping to workers (timeout: %v)...\n", cfg.Timeout)
 	}
-	
+
 	// Execute ping
 	responses, err := redisBroker.Ping(ctx, cfg.Timeout)
 	if err != nil {
 		return fmt.Errorf("ping failed: %w", err)
 	}
-	
+
 	// Output results
 	return outputResults(responses)
 }
@@ -147,7 +147,7 @@ func outputResults(responses map[string]broker.PingResponse) error {
 		}
 		os.Exit(1)
 	}
-	
+
 	switch cfg.OutputFormat {
 	case "json":
 		// Format as Celery-compatible JSON
@@ -157,22 +157,22 @@ func outputResults(responses map[string]broker.PingResponse) error {
 				"ok": response.Status,
 			}
 		}
-		
+
 		output, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 		fmt.Println(string(output))
-		
+
 	case "text":
 		for _, response := range responses {
 			fmt.Printf("%s: OK %s\n", response.WorkerName, response.Status)
 		}
 		fmt.Printf("%d nodes online.\n", len(responses))
-		
+
 	default:
 		return fmt.Errorf("unsupported output format: %s", cfg.OutputFormat)
 	}
-	
+
 	return nil
 }

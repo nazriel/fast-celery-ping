@@ -24,7 +24,7 @@ func NewHandler() *Handler {
 // CreatePingMessage creates a properly formatted Celery ping message
 func (h *Handler) CreatePingMessage(replyTo string) ([]byte, error) {
 	ticket := uuid.New().String()
-	
+
 	message := map[string]interface{}{
 		"method":      "ping",
 		"arguments":   map[string]interface{}{},
@@ -45,7 +45,7 @@ func (h *Handler) CreatePingMessage(replyTo string) ([]byte, error) {
 // ParseWorkerResponse parses a worker response and extracts relevant information
 func (h *Handler) ParseWorkerResponse(data []byte) (map[string]interface{}, error) {
 	var response map[string]interface{}
-	
+
 	// Try parsing as direct JSON first
 	if err := json.Unmarshal(data, &response); err != nil {
 		// If that fails, try parsing as string
@@ -53,7 +53,7 @@ func (h *Handler) ParseWorkerResponse(data []byte) (map[string]interface{}, erro
 		if err := json.Unmarshal(data, &strResponse); err != nil {
 			return nil, fmt.Errorf("failed to parse response: %w", err)
 		}
-		
+
 		// Try parsing the string content as JSON
 		if err := json.Unmarshal([]byte(strResponse), &response); err != nil {
 			// If all parsing fails, return the string as a simple response
@@ -62,7 +62,7 @@ func (h *Handler) ParseWorkerResponse(data []byte) (map[string]interface{}, erro
 			}, nil
 		}
 	}
-	
+
 	return response, nil
 }
 
@@ -70,7 +70,7 @@ func (h *Handler) ParseWorkerResponse(data []byte) (map[string]interface{}, erro
 func (h *Handler) ExtractWorkerName(response map[string]interface{}) string {
 	// Try different fields that might contain the worker name
 	fields := []string{"hostname", "worker", "nodename", "node", "name"}
-	
+
 	for _, field := range fields {
 		if value, exists := response[field]; exists {
 			if strValue, ok := value.(string); ok && strValue != "" {
@@ -78,7 +78,7 @@ func (h *Handler) ExtractWorkerName(response map[string]interface{}) string {
 			}
 		}
 	}
-	
+
 	// Check if there's a nested worker info
 	if worker, exists := response["worker"]; exists {
 		if workerMap, ok := worker.(map[string]interface{}); ok {
@@ -91,7 +91,7 @@ func (h *Handler) ExtractWorkerName(response map[string]interface{}) string {
 			}
 		}
 	}
-	
+
 	// As a last resort, look for any string field that looks like a hostname
 	for key, value := range response {
 		if strValue, ok := value.(string); ok {
@@ -100,7 +100,7 @@ func (h *Handler) ExtractWorkerName(response map[string]interface{}) string {
 			}
 		}
 	}
-	
+
 	return ""
 }
 
@@ -112,21 +112,21 @@ func (h *Handler) ValidateResponse(response map[string]interface{}) bool {
 			return true
 		}
 	}
-	
+
 	// Check for worker information
 	if hostname := h.ExtractWorkerName(response); hostname != "" {
 		return true
 	}
-	
+
 	// Check for common Celery response patterns
 	if _, exists := response["hostname"]; exists {
 		return true
 	}
-	
+
 	if _, exists := response["worker"]; exists {
 		return true
 	}
-	
+
 	return false
 }
 

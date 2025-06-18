@@ -74,12 +74,12 @@ type CeleryMessage struct {
 
 // MessageProperties represents message properties
 type MessageProperties struct {
-	CorrelationID string `json:"correlation_id"`
-	ReplyTo       string `json:"reply_to,omitempty"`
-	DeliveryMode  int    `json:"delivery_mode"`
+	CorrelationID string                 `json:"correlation_id"`
+	ReplyTo       string                 `json:"reply_to,omitempty"`
+	DeliveryMode  int                    `json:"delivery_mode"`
 	DeliveryInfo  map[string]interface{} `json:"delivery_info"`
-	Priority      int    `json:"priority"`
-	BodyEncoding  string `json:"body_encoding"`
+	Priority      int                    `json:"priority"`
+	BodyEncoding  string                 `json:"body_encoding"`
 }
 
 // BroadcastMessage represents a broadcast control message

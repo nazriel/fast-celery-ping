@@ -15,15 +15,15 @@ func TestRedisBroker_NewRedisBroker(t *testing.T) {
 	}
 
 	broker := NewRedisBroker(config)
-	
+
 	if broker == nil {
 		t.Fatal("Expected broker to be created, got nil")
 	}
-	
+
 	if broker.config.URL != config.URL {
 		t.Errorf("Expected URL %s, got %s", config.URL, broker.config.URL)
 	}
-	
+
 	if broker.handler == nil {
 		t.Fatal("Expected handler to be initialized")
 	}
@@ -36,7 +36,7 @@ func TestRedisBroker_Health_NoConnection(t *testing.T) {
 
 	broker := NewRedisBroker(config)
 	ctx := context.Background()
-	
+
 	// Should fail without connection
 	err := broker.Health(ctx)
 	if err == nil {
