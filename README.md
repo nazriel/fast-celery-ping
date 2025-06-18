@@ -130,6 +130,41 @@ This Go implementation provides significant performance improvements over the Py
 
 ## Development
 
+This project includes a `Justfile` for convenient development tasks using [Just](https://github.com/casey/just), a command runner similar to Make but simpler.
+
+### Using Just
+
+If you have Just installed, you can use the predefined tasks:
+
+```bash
+# List all available tasks
+just --list
+
+# Build the application
+just build
+
+# Run tests
+just test
+
+# Run tests with coverage
+just test-coverage
+
+# Format code
+just fmt
+
+# Run linter
+just lint
+
+# Build for multiple platforms
+just build-all
+
+# Quick development test with Redis
+just dev-test
+
+# Build Docker image
+just docker-build
+```
+
 ### Docker Development
 
 The project includes a `Dockerfile` optimized for production use with multi-stage builds:
@@ -151,7 +186,7 @@ docker run --rm \
   fast-celery-ping:latest
 ```
 
-### Manual Development
+### Manual Development (without Just)
 
 ```bash
 # Run tests
