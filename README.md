@@ -25,10 +25,27 @@ go build -o fast-celery-ping
 
 ### Using Docker
 
-The project includes a `Dockerfile` for containerized deployment:
+#### Pre-built Image (Recommended)
+
+A ready-to-use Docker image is available on Docker Hub at [@nazriel/fast-celery-ping](https://hub.docker.com/r/nazriel/fast-celery-ping):
 
 ```bash
-# Build Docker image
+# Pull the pre-built image
+docker pull nazriel/fast-celery-ping
+
+# Run with Docker
+docker run --rm nazriel/fast-celery-ping --help
+
+# Run with custom broker URL
+docker run --rm nazriel/fast-celery-ping --broker-url redis://host.docker.internal:6379/0
+```
+
+#### Building from Source
+
+The project also includes a `Dockerfile` for building your own image:
+
+```bash
+# Build Docker image from source
 docker build -t fast-celery-ping .
 
 # Run with Docker
@@ -176,14 +193,17 @@ docker build -t fast-celery-ping:latest .
 # Build multi-platform images (requires Docker Buildx)
 docker buildx build --platform linux/amd64,linux/arm64 -t fast-celery-ping:latest .
 
-# Run containerized application
-docker run --rm fast-celery-ping:latest --broker-url redis://host.docker.internal:6379/0
+# Run containerized application (using pre-built image)
+docker run --rm nazriel/fast-celery-ping --broker-url redis://host.docker.internal:6379/0
 
-# Run with environment variables
+# Run with environment variables (using pre-built image)
 docker run --rm \
   -e CELERY_BROKER_URL=redis://host.docker.internal:6379/0 \
   -e CELERY_PING_TIMEOUT=3s \
-  fast-celery-ping:latest
+  nazriel/fast-celery-ping
+
+# Run locally built image
+docker run --rm fast-celery-ping:latest --broker-url redis://host.docker.internal:6379/0
 ```
 
 ### Manual Development (without Just)
