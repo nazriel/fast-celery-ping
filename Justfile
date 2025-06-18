@@ -3,8 +3,8 @@
 # Use `just --list` to see all available commands
 
 # Variables
-APP_NAME := "fast-celery-ping"
-VERSION := "1.0.0"
+APP_NAME := env_var_or_default("APP_NAME", "fast-celery-ping")
+VERSION := env_var_or_default("VERSION", "1.0.0")
 BUILD_TIME := `date -u +%Y-%m-%dT%H:%M:%SZ`
 LDFLAGS := "-s -w -X 'fast-celery-ping/cmd.Version=" + VERSION + "' -X 'fast-celery-ping/cmd.BuildTime=" + BUILD_TIME + "'"
 
