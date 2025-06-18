@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +42,125 @@ func TestRedisBroker_Health_NoConnection(t *testing.T) {
 	err := broker.Health(ctx)
 	if err == nil {
 		t.Error("Expected health check to fail without connection")
+	}
+}
+
+func TestRedisBroker_Connect(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      Config
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "invalid Redis URL",
+			config: Config{
+				URL: "invalid-url",
+			},
+			wantErr:     true,
+			errContains: "failed to parse Redis URL",
+		},
+		{
+			name: "invalid port",
+			config: Config{
+				URL: "redis://localhost:99999/0", // Non-existent port
+			},
+			wantErr:     true,
+			errContains: "invalid port",
+		},
+		{
+			name: "valid URL but unreachable",
+			config: Config{
+				URL: "redis://192.0.2.1:6379/0", // RFC5737 TEST-NET-1 (unreachable)
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			broker := NewRedisBroker(tt.config)
+			ctx := context.Background()
+
+			err := broker.Connect(ctx)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Expected connection error, got nil")
+				} else if tt.errContains != "" {
+					if !strings.Contains(err.Error(), tt.errContains) {
+						t.Errorf("Expected error to contain '%s', got: %v", tt.errContains, err)
+					}
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+			}
+
+			// Always try to close, even if Connect failed
+			broker.Close()
+		})
+	}
+}
+
+func TestRedisBroker_Close(t *testing.T) {
+	// Test closing without connection
+	broker := NewRedisBroker(Config{URL: "redis://localhost:6379/0"})
+	err := broker.Close()
+	if err != nil {
+		t.Errorf("Expected no error closing unconnected broker, got: %v", err)
+	}
+
+	// Test closing after failed connection attempt
+	badBroker := NewRedisBroker(Config{URL: "invalid-url"})
+	ctx := context.Background()
+	badBroker.Connect(ctx) // This will fail
+	err = badBroker.Close()
+	if err != nil {
+		t.Errorf("Expected no error closing failed broker, got: %v", err)
+	}
+}
+
+func TestRedisBroker_Ping_Errors(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupFunc func() *RedisBroker
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name: "uninitialized client",
+			setupFunc: func() *RedisBroker {
+				return NewRedisBroker(Config{URL: "redis://localhost:6379/0"})
+			},
+			wantErr: true,
+			errMsg:  "Redis client not initialized",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			broker := tt.setupFunc()
+			ctx := context.Background()
+
+			responses, err := broker.Ping(ctx, time.Second, nil)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Expected ping error, got nil")
+				} else if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Expected error to contain '%s', got: %v", tt.errMsg, err)
+				}
+				if responses != nil {
+					t.Error("Expected nil responses on error")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+			}
+		})
 	}
 }
 

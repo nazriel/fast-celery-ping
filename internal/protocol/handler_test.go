@@ -191,6 +191,113 @@ func TestHandler_ValidateResponse(t *testing.T) {
 	}
 }
 
+func TestHandler_ParseWorkerResponse(t *testing.T) {
+	handler := NewHandler()
+
+	tests := []struct {
+		name        string
+		data        []byte
+		wantErr     bool
+		expectedLen int
+		checkField  func(map[string]interface{}) bool
+	}{
+		{
+			name: "base64 encoded celery response",
+			data: []byte(`{
+				"body": "eyJjZWxlcnlAaG9zdCI6IHsib2siOiAicG9uZyJ9fQ==",
+				"properties": {"delivery_mode": 2},
+				"headers": {"expires": 1234567890}
+			}`),
+			wantErr:     false,
+			expectedLen: 1,
+			checkField: func(response map[string]interface{}) bool {
+				if workerData, exists := response["celery@host"]; exists {
+					if workerMap, ok := workerData.(map[string]interface{}); ok {
+						return workerMap["ok"] == "pong"
+					}
+				}
+				return false
+			},
+		},
+		{
+			name: "direct JSON response without base64",
+			data: []byte(`{
+				"celery@worker": {"ok": "pong"},
+				"hostname": "worker@host"
+			}`),
+			wantErr:     false,
+			expectedLen: 2,
+			checkField: func(response map[string]interface{}) bool {
+				return response["hostname"] == "worker@host"
+			},
+		},
+		{
+			name:    "invalid JSON",
+			data:    []byte(`{"invalid": "json"`),
+			wantErr: true,
+		},
+		{
+			name:    "empty data",
+			data:    []byte(``),
+			wantErr: true,
+		},
+		{
+			name: "base64 with invalid inner JSON",
+			data: []byte(`{
+				"body": "aW52YWxpZCBqc29u",
+				"properties": {}
+			}`),
+			wantErr: true,
+		},
+		{
+			name: "base64 with valid inner JSON",
+			data: []byte(`{
+				"body": "eyJ3b3JrZXIxQGhvc3QiOiB7Im9rIjogInBvbmcifX0=",
+				"properties": {"priority": 0}
+			}`),
+			wantErr:     false,
+			expectedLen: 1,
+			checkField: func(response map[string]interface{}) bool {
+				if workerData, exists := response["worker1@host"]; exists {
+					if workerMap, ok := workerData.(map[string]interface{}); ok {
+						return workerMap["ok"] == "pong"
+					}
+				}
+				return false
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := handler.ParseWorkerResponse(tt.data)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if result == nil {
+				t.Fatal("Expected non-nil result")
+			}
+
+			if len(result) != tt.expectedLen {
+				t.Errorf("Expected %d fields in response, got %d", tt.expectedLen, len(result))
+			}
+
+			if tt.checkField != nil && !tt.checkField(result) {
+				t.Error("Field check failed for parsed response")
+			}
+		})
+	}
+}
+
 func TestHandler_FormatResponse(t *testing.T) {
 	handler := NewHandler()
 
