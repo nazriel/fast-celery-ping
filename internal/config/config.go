@@ -35,8 +35,8 @@ func DefaultConfig() *Config {
 		Database:      0,
 		Username:      "",
 		Password:      "",
-		Timeout:       time.Second * 1,
-		OutputFormat:  "json",
+		Timeout:       time.Second * 15 / 10, // 1.5 seconds
+		OutputFormat:  "text",
 		Verbose:       false,
 		MaxWorkers:    10,
 		RetryAttempts: 3,

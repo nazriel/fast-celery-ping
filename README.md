@@ -33,8 +33,8 @@ go build -o fast-celery-ping
 # Set custom timeout and verbose output
 ./fast-celery-ping --timeout 5s --verbose
 
-# Output in text format instead of JSON
-./fast-celery-ping --format text
+# Output in JSON format instead of text
+./fast-celery-ping --format json
 ```
 
 ### Configuration Options
@@ -42,8 +42,8 @@ go build -o fast-celery-ping
 | Flag | Environment Variable | Default | Description |
 |------|---------------------|---------|-------------|
 | `--broker-url` | `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Redis connection URL |
-| `--timeout` | `CELERY_PING_TIMEOUT` | `1s` | Timeout for ping responses |
-| `--format` | `OUTPUT_FORMAT` | `json` | Output format (json/text) |
+| `--timeout` | `CELERY_PING_TIMEOUT` | `1.5s` | Timeout for ping responses |
+| `--format` | `OUTPUT_FORMAT` | `text` | Output format (json/text) |
 | `--database` | `REDIS_DB` | `0` | Redis database number |
 | `--username` | `REDIS_USERNAME` | | Redis username |
 | `--password` | `REDIS_PASSWORD` | | Redis password |
@@ -65,7 +65,7 @@ export CELERY_PING_TIMEOUT="3s"
 # Output: worker@hostname: OK pong
 #         1 nodes online.
 
-# JSON output format (default)
+# JSON output format
 ./fast-celery-ping --format json
 # Output: {
 #           "worker@hostname": {

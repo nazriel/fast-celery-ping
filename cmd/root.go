@@ -52,8 +52,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&brokerURL, "broker-url", "", "Broker URL (default from CELERY_BROKER_URL env var or redis://localhost:6379/0)")
-	rootCmd.PersistentFlags().DurationVar(&timeout, "timeout", 0, "Timeout for ping responses (default 1s)")
-	rootCmd.PersistentFlags().StringVar(&format, "format", "", "Output format: json or text (default json)")
+	rootCmd.PersistentFlags().DurationVar(&timeout, "timeout", 0, "Timeout for ping responses (default 1.5s)")
+	rootCmd.PersistentFlags().StringVar(&format, "format", "", "Output format: json or text (default text)")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().IntVar(&database, "database", 0, "Redis database number")
 	rootCmd.PersistentFlags().StringVar(&username, "username", "", "Redis username")

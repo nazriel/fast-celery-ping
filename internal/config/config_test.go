@@ -118,7 +118,7 @@ func TestConfig_LoadFromEnv(t *testing.T) {
 				"CELERY_PING_TIMEOUT": "invalid",
 			},
 			expected: func(c *Config) bool {
-				return c.Timeout == time.Second // should keep default
+				return c.Timeout == time.Second*15/10 // should keep default (1.5s)
 			},
 		},
 		{
