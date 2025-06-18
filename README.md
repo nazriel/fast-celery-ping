@@ -14,11 +14,28 @@ Goal is to be faster and more resource efficient that python's implementation.
 
 ## Installation
 
+### From Source
+
 ```bash
 # Build from source
 git clone <repository-url>
 cd fast-celery-ping
 go build -o fast-celery-ping
+```
+
+### Using Docker
+
+The project includes a `Dockerfile` for containerized deployment:
+
+```bash
+# Build Docker image
+docker build -t fast-celery-ping .
+
+# Run with Docker
+docker run --rm fast-celery-ping --help
+
+# Run with custom broker URL
+docker run --rm fast-celery-ping --broker-url redis://host.docker.internal:6379/0
 ```
 
 ## Usage
@@ -109,10 +126,32 @@ This Go implementation provides significant performance improvements over the Py
 - RabbitMQ broker support
 - Additional output formats (XML, YAML)
 - Prometheus metrics integration
-- Docker image
 - Helm chart for Kubernetes deployments
 
 ## Development
+
+### Docker Development
+
+The project includes a `Dockerfile` optimized for production use with multi-stage builds:
+
+```bash
+# Build Docker image manually
+docker build -t fast-celery-ping:latest .
+
+# Build multi-platform images (requires Docker Buildx)
+docker buildx build --platform linux/amd64,linux/arm64 -t fast-celery-ping:latest .
+
+# Run containerized application
+docker run --rm fast-celery-ping:latest --broker-url redis://host.docker.internal:6379/0
+
+# Run with environment variables
+docker run --rm \
+  -e CELERY_BROKER_URL=redis://host.docker.internal:6379/0 \
+  -e CELERY_PING_TIMEOUT=3s \
+  fast-celery-ping:latest
+```
+
+### Manual Development
 
 ```bash
 # Run tests
