@@ -1,0 +1,72 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment files
+.env*
+!.env.example
+
+# Test files and coverage
+*_test.go
+*.test
+*.out
+coverage.txt
+coverage.html
+coverage.out
+test/
+.cache/
+
+# Build artifacts (except the final binary)
+/fast-celery-ping-*
+/bin/
+/build/
+/dist/
+
+# Development tools
+.air.toml
+Makefile
+docker-compose*.yml
+.local/
+local.config
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Vendor directory (if using)
+vendor/
+
+# Claude development files
+CLAUDE.md
