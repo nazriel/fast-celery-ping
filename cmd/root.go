@@ -51,6 +51,9 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
+	// Set version information in the root command
+	rootCmd.Version = GetVersionInfo()
+
 	rootCmd.PersistentFlags().StringVar(&brokerURL, "broker-url", "", "Broker URL (default from CELERY_BROKER_URL env var or redis://localhost:6379/0)")
 	rootCmd.PersistentFlags().DurationVar(&timeout, "timeout", 0, "Timeout for ping responses (default 1.5s)")
 	rootCmd.PersistentFlags().StringVar(&format, "format", "", "Output format: json or text (default text)")

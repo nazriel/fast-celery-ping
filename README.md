@@ -1,6 +1,8 @@
 # Fast Celery Ping
 
-A fast, self-contained Go alternative to Python's `celery inspect ping` command. This tool provides efficient worker discovery for Celery deployments using Redis as the message broker.
+A fast, self-contained Go alternative to Python's `celery inspect ping` command.
+
+Goal is to be faster and more resource efficient that python's implementation.
 
 ## Features
 
@@ -35,6 +37,9 @@ go build -o fast-celery-ping
 
 # Output in JSON format instead of text
 ./fast-celery-ping --format json
+
+# Show version information
+./fast-celery-ping version
 ```
 
 ### Configuration Options
@@ -72,6 +77,13 @@ export CELERY_PING_TIMEOUT="3s"
 #             "ok": "pong"
 #           }
 #         }
+
+# Version information
+./fast-celery-ping version
+# Output: fast-celery-ping version 1.0.0
+#         Build time: 2024-01-15T10:30:45Z
+#         Go version: go1.21.5
+#         Platform: darwin/arm64
 ```
 
 ## Architecture
