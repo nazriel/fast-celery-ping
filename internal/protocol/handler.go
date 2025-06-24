@@ -10,6 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// MessageFormat represents the format of the ping message
+type MessageFormat int
+
+const (
+	// MessageFormatRaw returns the control message as raw JSON (used by AMQP)
+	MessageFormatRaw MessageFormat = iota
+	// MessageFormatEnveloped returns the control message base64-encoded and wrapped in envelope (used by Redis)
+	MessageFormatEnveloped
+)
+
 // Handler manages Celery protocol operations
 type Handler struct {
 	nodeID string
@@ -22,8 +32,8 @@ func NewHandler() *Handler {
 	}
 }
 
-// CreatePingMessage creates a properly formatted Celery ping message
-func (h *Handler) CreatePingMessage(replyTo string, destinations []string) ([]byte, error) {
+// CreatePingMessage creates a Celery ping message in the specified format
+func (h *Handler) CreatePingMessage(replyTo string, destinations []string, format MessageFormat) ([]byte, error) {
 	ticket := uuid.New().String()
 
 	// Determine destination - nil for broadcast, or specific destinations
@@ -35,7 +45,6 @@ func (h *Handler) CreatePingMessage(replyTo string, destinations []string) ([]by
 	}
 
 	// Create the control message that Celery workers expect
-	// Use ordered map to ensure exact field order matches Python celery
 	controlMessage := map[string]interface{}{
 		"method":      "ping",
 		"arguments":   map[string]interface{}{},
@@ -45,45 +54,54 @@ func (h *Handler) CreatePingMessage(replyTo string, destinations []string) ([]by
 		"ticket":      ticket,
 		"reply_to": map[string]interface{}{
 			"exchange":    "reply.celery.pidbox",
-			"routing_key": replyTo, // replyTo is already just the UUID
+			"routing_key": replyTo,
 		},
 	}
 
-	// JSON encode the control message
-	bodyBytes, err := json.Marshal(controlMessage)
-	if err != nil {
-		return nil, err
-	}
+	// Apply format-specific processing
+	switch format {
+	case MessageFormatRaw:
+		// Return the control message directly as JSON (used by AMQP)
+		return json.Marshal(controlMessage)
+	case MessageFormatEnveloped:
+		// Base64 encode the control message and wrap in envelope (used by Redis)
+		bodyBytes, err := json.Marshal(controlMessage)
+		if err != nil {
+			return nil, err
+		}
 
-	// Base64 encode the body like Python Celery does
-	base64Body := base64.StdEncoding.EncodeToString(bodyBytes)
+		// Base64 encode the body like Python Celery does
+		base64Body := base64.StdEncoding.EncodeToString(bodyBytes)
 
-	// Set expiry to 10 seconds to ensure workers have time to respond
-	now := time.Now()
-	expires := now.Add(10 * time.Second).Unix()
+		// Set expiry to 10 seconds to ensure workers have time to respond
+		now := time.Now()
+		expires := now.Add(10 * time.Second).Unix()
 
-	// Create the complete message envelope matching Python Celery exactly
-	envelope := map[string]interface{}{
-		"body":             base64Body,
-		"content-encoding": "utf-8",
-		"content-type":     "application/json",
-		"headers": map[string]interface{}{
-			"clock":   1,
-			"expires": expires,
-		},
-		"properties": map[string]interface{}{
-			"delivery_mode": 2,
-			"delivery_info": map[string]interface{}{
-				"exchange":    "celery.pidbox",
-				"routing_key": "",
+		// Create the complete message envelope matching Python Celery exactly
+		envelope := map[string]interface{}{
+			"body":             base64Body,
+			"content-encoding": "utf-8",
+			"content-type":     "application/json",
+			"headers": map[string]interface{}{
+				"clock":   1,
+				"expires": expires,
 			},
-			"priority":      0,
-			"body_encoding": "base64",
-			"delivery_tag":  uuid.New().String(),
-		},
-	}
+			"properties": map[string]interface{}{
+				"delivery_mode": 2,
+				"delivery_info": map[string]interface{}{
+					"exchange":    "celery.pidbox",
+					"routing_key": "",
+				},
+				"priority":      0,
+				"body_encoding": "base64",
+				"delivery_tag":  uuid.New().String(),
+			},
+		}
 
-	return json.Marshal(envelope)
+		return json.Marshal(envelope)
+	default:
+		return nil, fmt.Errorf("unsupported message format: %v", format)
+	}
 }
 
 // ParseWorkerResponse parses a worker response and extracts relevant information

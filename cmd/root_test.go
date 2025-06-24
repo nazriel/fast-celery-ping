@@ -276,7 +276,7 @@ func TestOutputResults_InvalidFormat(t *testing.T) {
 func TestInitConfig_EnvVarHandling(t *testing.T) {
 	// Save original environment
 	originalEnv := map[string]string{
-		"CELERY_BROKER_URL": os.Getenv("CELERY_BROKER_URL"),
+		"BROKER_URL": os.Getenv("BROKER_URL"),
 	}
 
 	defer func() {
@@ -290,7 +290,7 @@ func TestInitConfig_EnvVarHandling(t *testing.T) {
 	}()
 
 	// Test with environment variable
-	os.Setenv("CELERY_BROKER_URL", "redis://env-test:6379/0")
+	os.Setenv("BROKER_URL", "redis://env-test:6379/0")
 
 	// Reset globals
 	cfg = nil

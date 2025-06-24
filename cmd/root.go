@@ -31,10 +31,11 @@ var rootCmd = &cobra.Command{
 	Use:   "fast-celery-ping",
 	Short: "Fast alternative to celery inspect ping",
 	Long: `A fast, self-contained Go alternative to 'celery inspect ping' command.
-Currently supports Redis broker with easy extensibility for other brokers.
+Supports Redis and RabbitMQ/AMQP brokers with automatic detection from URL.
 
 Examples:
   fast-celery-ping --broker-url redis://localhost:6379/0
+  fast-celery-ping --broker-url amqp://guest:guest@localhost:5672/
   fast-celery-ping --timeout 5s --format text
   fast-celery-ping --verbose`,
 	RunE: runPing,
@@ -54,13 +55,13 @@ func init() {
 	// Set version information in the root command
 	rootCmd.Version = GetVersionInfo()
 
-	rootCmd.PersistentFlags().StringVar(&brokerURL, "broker-url", "", "Broker URL (default from CELERY_BROKER_URL env var or redis://localhost:6379/0)")
+	rootCmd.PersistentFlags().StringVar(&brokerURL, "broker-url", "", "Broker URL (default from BROKER_URL env var or redis://localhost:6379/0)")
 	rootCmd.PersistentFlags().DurationVar(&timeout, "timeout", 0, "Timeout for ping responses (default 1.5s)")
 	rootCmd.PersistentFlags().StringVar(&format, "format", "", "Output format: json or text (default text)")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
-	rootCmd.PersistentFlags().IntVar(&database, "database", 0, "Redis database number")
-	rootCmd.PersistentFlags().StringVar(&username, "username", "", "Redis username")
-	rootCmd.PersistentFlags().StringVar(&password, "password", "", "Redis password")
+	rootCmd.PersistentFlags().IntVar(&database, "database", 0, "Broker database number")
+	rootCmd.PersistentFlags().StringVar(&username, "username", "", "Broker username")
+	rootCmd.PersistentFlags().StringVar(&password, "password", "", "Broker password")
 	rootCmd.PersistentFlags().StringVarP(&destination, "destination", "d", "", "Comma separated list of destination node names")
 }
 
@@ -77,6 +78,7 @@ func initConfig() {
 	// Override with command line flags
 	if brokerURL != "" {
 		cfg.BrokerURL = brokerURL
+		cfg.BrokerType = config.DetectBrokerType(brokerURL)
 	}
 	if timeout > 0 {
 		cfg.Timeout = timeout
@@ -117,7 +119,7 @@ func runPing(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	if cfg.Verbose {
-		fmt.Fprintf(os.Stderr, "Connecting to broker: %s\n", cfg.BrokerURL)
+		fmt.Fprintf(os.Stderr, "Connecting to %s broker: %s\n", cfg.BrokerType, cfg.BrokerURL)
 	}
 
 	// Create broker
@@ -128,13 +130,16 @@ func runPing(cmd *cobra.Command, args []string) error {
 		Password: cfg.Password,
 	}
 
-	redisBroker := broker.NewRedisBroker(brokerConfig)
+	brokerInstance, err := broker.NewBroker(cfg.BrokerType, brokerConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create broker: %w", err)
+	}
 
 	// Connect to broker
-	if err := redisBroker.Connect(ctx); err != nil {
+	if err := brokerInstance.Connect(ctx); err != nil {
 		return fmt.Errorf("failed to connect to broker: %w", err)
 	}
-	defer redisBroker.Close()
+	defer brokerInstance.Close()
 
 	if cfg.Verbose {
 		if len(cfg.Destination) > 0 {
@@ -145,7 +150,7 @@ func runPing(cmd *cobra.Command, args []string) error {
 	}
 
 	// Execute ping
-	responses, err := redisBroker.Ping(ctx, cfg.Timeout, cfg.Destination)
+	responses, err := brokerInstance.Ping(ctx, cfg.Timeout, cfg.Destination)
 	if err != nil {
 		return fmt.Errorf("ping failed: %w", err)
 	}
