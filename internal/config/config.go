@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -29,9 +31,12 @@ type Config struct {
 
 // DefaultConfig returns a configuration with sensible defaults
 func DefaultConfig() *Config {
+	brokerURL := getEnvWithDefault("BROKER_URL", "redis://localhost:6379/0")
+	brokerType := DetectBrokerType(brokerURL)
+
 	return &Config{
-		BrokerURL:     getEnvWithDefault("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-		BrokerType:    "redis",
+		BrokerURL:     brokerURL,
+		BrokerType:    brokerType,
 		Database:      0,
 		Username:      "",
 		Password:      "",
@@ -45,25 +50,27 @@ func DefaultConfig() *Config {
 
 // LoadFromEnv loads configuration from environment variables
 func (c *Config) LoadFromEnv() error {
-	if brokerURL := os.Getenv("CELERY_BROKER_URL"); brokerURL != "" {
+	if brokerURL := os.Getenv("BROKER_URL"); brokerURL != "" {
 		c.BrokerURL = brokerURL
+		c.BrokerType = DetectBrokerType(brokerURL)
 	}
 
-	if username := os.Getenv("REDIS_USERNAME"); username != "" {
+	// Support generic broker username/password environment variables
+	if username := os.Getenv("BROKER_USERNAME"); username != "" {
 		c.Username = username
 	}
 
-	if password := os.Getenv("REDIS_PASSWORD"); password != "" {
+	if password := os.Getenv("BROKER_PASSWORD"); password != "" {
 		c.Password = password
 	}
 
-	if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
+	if dbStr := os.Getenv("BROKER_DB"); dbStr != "" {
 		if db, err := strconv.Atoi(dbStr); err == nil {
 			c.Database = db
 		}
 	}
 
-	if timeoutStr := os.Getenv("CELERY_PING_TIMEOUT"); timeoutStr != "" {
+	if timeoutStr := os.Getenv("BROKER_TIMEOUT"); timeoutStr != "" {
 		if timeout, err := time.ParseDuration(timeoutStr); err == nil {
 			c.Timeout = timeout
 		}
@@ -84,6 +91,14 @@ func (c *Config) LoadFromEnv() error {
 func (c *Config) Validate() error {
 	if c.BrokerURL == "" {
 		return fmt.Errorf("broker URL is required")
+	}
+
+	if _, err := url.Parse(c.BrokerURL); err != nil {
+		return fmt.Errorf("invalid broker URL format: %w", err)
+	}
+
+	if c.BrokerType != "redis" && c.BrokerType != "amqp" {
+		return fmt.Errorf("unsupported broker type: %s (supported: redis, amqp)", c.BrokerType)
 	}
 
 	if c.Timeout <= 0 {
@@ -107,4 +122,25 @@ func getEnvWithDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func DetectBrokerType(brokerURL string) string {
+	if brokerURL == "" {
+		return "redis" // default
+	}
+
+	parsedURL, err := url.Parse(brokerURL)
+	if err != nil {
+		return "redis" // fallback to redis if URL is invalid
+	}
+
+	scheme := strings.ToLower(parsedURL.Scheme)
+	switch scheme {
+	case "amqp", "amqps":
+		return "amqp"
+	case "redis", "rediss":
+		return "redis"
+	default:
+		return "redis" // default fallback
+	}
 }

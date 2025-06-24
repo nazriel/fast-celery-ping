@@ -80,20 +80,20 @@ docker run --rm fast-celery-ping --broker-url redis://host.docker.internal:6379/
 
 | Flag | Environment Variable | Default | Description |
 |------|---------------------|---------|-------------|
-| `--broker-url` | `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Redis connection URL |
-| `--timeout` | `CELERY_PING_TIMEOUT` | `1.5s` | Timeout for ping responses |
+| `--broker-url` | `BROKER_URL` | `redis://localhost:6379/0` | Broker connection URL (Redis/AMQP) |
+| `--timeout` | `BROKER_TIMEOUT` | `1.5s` | Timeout for ping responses |
 | `--format` | `OUTPUT_FORMAT` | `text` | Output format (json/text) |
-| `--database` | `REDIS_DB` | `0` | Redis database number |
-| `--username` | `REDIS_USERNAME` | | Redis username |
-| `--password` | `REDIS_PASSWORD` | | Redis password |
+| `--database` | `BROKER_DB` | `0` | Broker database number |
+| `--username` | `BROKER_USERNAME` | | Broker username |
+| `--password` | `BROKER_PASSWORD` | | Broker password |
 | `--verbose` | `VERBOSE` | `false` | Enable verbose output |
 
 ### Examples
 
 ```bash
 # Using environment variables
-export CELERY_BROKER_URL="redis://localhost:6379/2"
-export CELERY_PING_TIMEOUT="3s"
+export BROKER_URL="redis://localhost:6379/2"
+export BROKER_TIMEOUT="3s"
 ./fast-celery-ping
 
 # Authentication with Redis
@@ -198,8 +198,8 @@ docker run --rm nazriel/fast-celery-ping --broker-url redis://host.docker.intern
 
 # Run with environment variables (using pre-built image)
 docker run --rm \
-  -e CELERY_BROKER_URL=redis://host.docker.internal:6379/0 \
-  -e CELERY_PING_TIMEOUT=3s \
+  -e BROKER_URL=redis://host.docker.internal:6379/0 \
+  -e BROKER_TIMEOUT=3s \
   nazriel/fast-celery-ping
 
 # Run locally built image

@@ -60,3 +60,14 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+func NewBroker(brokerType string, config Config) (Broker, error) {
+	switch brokerType {
+	case "redis":
+		return NewRedisBroker(config), nil
+	case "amqp":
+		return NewAMQPBroker(config), nil
+	default:
+		return nil, fmt.Errorf("unsupported broker type: %s", brokerType)
+	}
+}

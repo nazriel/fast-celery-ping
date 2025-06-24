@@ -51,41 +51,53 @@ func TestHandler_CreatePingMessage(t *testing.T) {
 	tests := []struct {
 		name         string
 		destinations []string
+		format       MessageFormat
+		checkFields  []string
 	}{
 		{
-			name:         "broadcast message",
+			name:         "broadcast message enveloped",
 			destinations: nil,
+			format:       MessageFormatEnveloped,
+			checkFields:  []string{"body", "properties", "headers"},
 		},
 		{
-			name:         "targeted message",
+			name:         "targeted message enveloped",
 			destinations: []string{"worker1@host", "worker2@host"},
+			format:       MessageFormatEnveloped,
+			checkFields:  []string{"body", "properties", "headers"},
+		},
+		{
+			name:         "broadcast message raw",
+			destinations: nil,
+			format:       MessageFormatRaw,
+			checkFields:  []string{"method", "arguments", "ticket", "reply_to"},
+		},
+		{
+			name:         "targeted message raw",
+			destinations: []string{"worker1@host", "worker2@host"},
+			format:       MessageFormatRaw,
+			checkFields:  []string{"method", "arguments", "ticket", "reply_to"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			messageData, err := handler.CreatePingMessage(replyTo, tt.destinations)
+			messageData, err := handler.CreatePingMessage(replyTo, tt.destinations, tt.format)
 			if err != nil {
 				t.Fatalf("Failed to create ping message: %v", err)
 			}
 
-			var envelope map[string]interface{}
-			err = json.Unmarshal(messageData, &envelope)
+			var message map[string]interface{}
+			err = json.Unmarshal(messageData, &message)
 			if err != nil {
 				t.Fatalf("Failed to unmarshal ping message: %v", err)
 			}
 
-			// Check that the envelope has the expected structure
-			if _, exists := envelope["body"]; !exists {
-				t.Error("Expected 'body' field in ping message envelope")
-			}
-
-			if _, exists := envelope["properties"]; !exists {
-				t.Error("Expected 'properties' field in ping message envelope")
-			}
-
-			if _, exists := envelope["headers"]; !exists {
-				t.Error("Expected 'headers' field in ping message envelope")
+			// Check that the message has the expected structure
+			for _, field := range tt.checkFields {
+				if _, exists := message[field]; !exists {
+					t.Errorf("Expected '%s' field in ping message", field)
+				}
 			}
 		})
 	}
@@ -323,5 +335,127 @@ func TestHandler_FormatResponse(t *testing.T) {
 				t.Errorf("Expected status %s, got %v", status, ok)
 			}
 		}
+	}
+}
+
+func TestHandler_CreatePingMessageRaw(t *testing.T) {
+	handler := NewHandler()
+
+	tests := []struct {
+		name         string
+		replyTo      string
+		destinations []string
+		wantFields   map[string]interface{}
+	}{
+		{
+			name:         "broadcast message raw format",
+			replyTo:      "test-reply-queue",
+			destinations: nil,
+			wantFields: map[string]interface{}{
+				"method":      "ping",
+				"arguments":   map[string]interface{}{},
+				"destination": nil,
+				"pattern":     nil,
+				"matcher":     nil,
+			},
+		},
+		{
+			name:         "targeted message raw format",
+			replyTo:      "test-reply-queue",
+			destinations: []string{"worker1@host1", "worker2@host2"},
+			wantFields: map[string]interface{}{
+				"method":      "ping",
+				"arguments":   map[string]interface{}{},
+				"destination": []interface{}{"worker1@host1", "worker2@host2"},
+				"pattern":     nil,
+				"matcher":     nil,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := handler.CreatePingMessage(tt.replyTo, tt.destinations, MessageFormatRaw)
+			if err != nil {
+				t.Fatalf("CreatePingMessage() error = %v", err)
+			}
+
+			var message map[string]interface{}
+			err = json.Unmarshal(data, &message)
+			if err != nil {
+				t.Fatalf("Failed to parse raw ping message JSON: %v", err)
+			}
+
+			for field, expectedValue := range tt.wantFields {
+				actualValue, exists := message[field]
+				if !exists {
+					t.Errorf("Expected field %s not found in message", field)
+					continue
+				}
+
+				if expectedSlice, ok := expectedValue.([]interface{}); ok {
+					actualSlice, ok := actualValue.([]interface{})
+					if !ok {
+						t.Errorf("Field %s: expected slice, got %T", field, actualValue)
+						continue
+					}
+					if len(expectedSlice) != len(actualSlice) {
+						t.Errorf("Field %s: expected slice length %d, got %d", field, len(expectedSlice), len(actualSlice))
+						continue
+					}
+					for i, expected := range expectedSlice {
+						if actualSlice[i] != expected {
+							t.Errorf("Field %s[%d]: expected %v, got %v", field, i, expected, actualSlice[i])
+						}
+					}
+				} else if expectedMap, ok := expectedValue.(map[string]interface{}); ok {
+					actualMap, ok := actualValue.(map[string]interface{})
+					if !ok {
+						t.Errorf("Field %s: expected map, got %T", field, actualValue)
+						continue
+					}
+					if len(expectedMap) != len(actualMap) {
+						t.Errorf("Field %s: expected map length %d, got %d", field, len(expectedMap), len(actualMap))
+						continue
+					}
+					if len(expectedMap) == 0 && len(actualMap) == 0 {
+						// Empty maps match
+						continue
+					}
+					t.Logf("Field %s: both maps exist with expected lengths", field)
+				} else {
+					if actualValue != expectedValue {
+						t.Errorf("Field %s: expected %v, got %v", field, expectedValue, actualValue)
+					}
+				}
+			}
+
+			ticket, exists := message["ticket"]
+			if !exists {
+				t.Error("Expected 'ticket' field not found in message")
+			} else if _, ok := ticket.(string); !ok {
+				t.Errorf("Expected 'ticket' to be string, got %T", ticket)
+			}
+
+			replyToField, exists := message["reply_to"]
+			if !exists {
+				t.Error("Expected 'reply_to' field not found in message")
+			} else {
+				replyToMap, ok := replyToField.(map[string]interface{})
+				if !ok {
+					t.Errorf("Expected 'reply_to' to be map, got %T", replyToField)
+				} else {
+					if replyToMap["exchange"] != "reply.celery.pidbox" {
+						t.Errorf("Expected reply_to.exchange to be 'reply.celery.pidbox', got %v", replyToMap["exchange"])
+					}
+					if replyToMap["routing_key"] != tt.replyTo {
+						t.Errorf("Expected reply_to.routing_key to be %s, got %v", tt.replyTo, replyToMap["routing_key"])
+					}
+				}
+			}
+
+			// Verify the message is raw JSON (direct control message)
+			t.Logf("Raw message structure verified: %s", string(data))
+		})
 	}
 }

@@ -74,8 +74,8 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration, destinati
 	// Create reply queue with simple UUID format
 	replyTo := r.handler.CreateReplyQueue()
 
-	// Create ping message
-	pingData, err := r.handler.CreatePingMessage(replyTo, destinations)
+	// Create ping message in enveloped format (base64 + envelope wrapper)
+	pingData, err := r.handler.CreatePingMessage(replyTo, destinations, protocol.MessageFormatEnveloped)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ping message: %w", err)
 	}

@@ -221,3 +221,56 @@ func TestConfig_Validate(t *testing.T) {
 		})
 	}
 }
+
+func TestNewBroker(t *testing.T) {
+	config := Config{
+		URL:      "redis://localhost:6379/0",
+		Database: 0,
+		Username: "",
+		Password: "",
+	}
+
+	tests := []struct {
+		name        string
+		brokerType  string
+		expectError bool
+	}{
+		{
+			name:        "redis broker",
+			brokerType:  "redis",
+			expectError: false,
+		},
+		{
+			name:        "amqp broker",
+			brokerType:  "amqp",
+			expectError: false,
+		},
+		{
+			name:        "unsupported broker",
+			brokerType:  "kafka",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			broker, err := NewBroker(tt.brokerType, config)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error for unsupported broker type, got nil")
+				}
+				if broker != nil {
+					t.Error("Expected nil broker for unsupported type, got non-nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if broker == nil {
+					t.Error("Expected non-nil broker, got nil")
+				}
+			}
+		})
+	}
+}
