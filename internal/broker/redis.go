@@ -111,6 +111,10 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration, destinati
 	// Give workers a moment to see the reply queue binding
 	time.Sleep(50 * time.Millisecond)
 
+	// Track last response time for early exit logic
+	lastResponseTime := time.Now()
+	responseGapTimeout := 200 * time.Millisecond // Exit if no responses for 200ms
+
 	for time.Now().Before(deadline) {
 		// Calculate remaining time
 		remaining := time.Until(deadline)
@@ -118,11 +122,14 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration, destinati
 			break
 		}
 
-		// Use 1s BRPOP timeout (Redis minimum)
-		// Never use less than 1s to avoid Redis warnings
-		brpopTimeout := 1 * time.Second
+		// Use shorter BRPOP timeout for more responsive behavior
+		brpopTimeout := 100 * time.Millisecond
 		if remaining < brpopTimeout {
-			// If less than 1s remaining, break out of loop
+			brpopTimeout = remaining
+		}
+
+		// Early exit if we haven't received responses for a while and have some responses
+		if len(responses) > 0 && time.Since(lastResponseTime) > responseGapTimeout {
 			break
 		}
 
@@ -156,6 +163,8 @@ func (r *RedisBroker) Ping(ctx context.Context, timeout time.Duration, destinati
 					Status:     "pong",
 					Timestamp:  time.Now().Unix(),
 				}
+				// Update last response time for early exit logic
+				lastResponseTime = time.Now()
 			}
 		}
 	}
